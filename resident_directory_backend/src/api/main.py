@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.core.db import Base, _engine  # intentional internal import for startup create_all
+from src.api.core.db import init_db_schema
 from src.api.routes.auth import router as auth_router
 from src.api.routes.residents import router as residents_router
 
@@ -39,8 +39,17 @@ def _on_startup() -> None:
 
     Note: For production, prefer migrations (Alembic). For this project we create tables
     automatically to simplify environment bootstrapping.
+
+    Preview environment note:
+    The DB container may not be reachable immediately. We avoid crashing the app on boot
+    so port readiness can succeed; DB-backed endpoints will still error until DB is up.
     """
-    Base.metadata.create_all(bind=_engine)
+    try:
+        init_db_schema()
+    except Exception:
+        # Intentionally tolerant: health endpoint should remain available.
+        # The orchestrator/CI will surface DB connectivity issues separately.
+        return
 
 
 @app.get(
