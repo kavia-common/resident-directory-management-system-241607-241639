@@ -1,7 +1,28 @@
+from __future__ import annotations
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+from src.api.core.db import Base, _engine  # intentional internal import for startup create_all
+from src.api.routes.auth import router as auth_router
+from src.api.routes.residents import router as residents_router
+
+openapi_tags = [
+    {"name": "Health", "description": "Service health and readiness endpoints."},
+    {"name": "Auth", "description": "Admin authentication endpoints (login + token validation)."},
+    {"name": "Residents", "description": "Resident directory endpoints (public list/search + admin management)."},
+]
+
+app = FastAPI(
+    title="Resident Directory Backend API",
+    description=(
+        "FastAPI backend for the Resident Directory app.\n\n"
+        "Auth: Use `POST /auth/login` to obtain a Bearer JWT, then pass it as "
+        "`Authorization: Bearer <token>` for protected endpoints."
+    ),
+    version="1.0.0",
+    openapi_tags=openapi_tags,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -11,6 +32,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    """Initialize DB schema on startup.
+
+    Note: For production, prefer migrations (Alembic). For this project we create tables
+    automatically to simplify environment bootstrapping.
+    """
+    Base.metadata.create_all(bind=_engine)
+
+
+@app.get(
+    "/",
+    tags=["Health"],
+    summary="Health check",
+    description="Basic health check endpoint.",
+    operation_id="health_check",
+)
 def health_check():
+    """Health check endpoint."""
     return {"message": "Healthy"}
+
+
+app.include_router(auth_router)
+app.include_router(residents_router)
